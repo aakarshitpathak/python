@@ -11,48 +11,44 @@ import random
 import threading
 import musicLibrary
 
-# Set up OpenAI API Key
+# ---------------------- API KEYS ----------------------
 openai.api_key = "your-openai-api-key"
+newsapi = "your-newsapi-key"
 
-newsapi = "Your news api"
-
-# Initialize speech engine only once
-engine = pyttsx3.init()
-voices = engine.getProperty('voices')
-
-def set_voice(voice_index=0, rate=200):
-    """Set voice and speed"""
-    if voice_index < len(voices):
-        engine.setProperty('voice', voices[voice_index].id)
-    engine.setProperty('rate', rate)  
-    engine.setProperty('volume', 1.0)  
-
-set_voice(1)  # Change index based on available voices
-
+# ---------------------- VOICE ENGINE ----------------------
 def speak(text):
-    """Safe speech execution without threading issues"""
-    engine.say(text)
-    engine.runAndWait()
+    """Speak reliably using fresh engine each time."""
+    print(f"Jarvis says: {text}")
+    try:
+        engine = pyttsx3.init(driverName='sapi5')
+        voices = engine.getProperty('voices')
+        engine.setProperty('voice', voices[1].id)  # change 0/1 for male/female
+        engine.setProperty('rate', 180)
+        engine.setProperty('volume', 1.0)
+        engine.say(text)
+        engine.runAndWait()
+        engine.stop()
+    except Exception as ex:
+        print("Speech Error:", ex)
 
-
-# App Paths for opening apps
+# ---------------------- APP PATHS ----------------------
 app_paths = {
     "chrome": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
     "notepad": "C:\\Windows\\system32\\notepad.exe",
     "spotify": "C:\\Users\\User\\AppData\\Roaming\\Spotify\\Spotify.exe"
 }
 
-# AI Memory Storage
+# ---------------------- MEMORY ----------------------
 chat_history = []
 
+# ---------------------- LISTEN ----------------------
 def listen():
-    """Faster speech recognition"""
     recognizer = sr.Recognizer()
     with sr.Microphone() as source:
         print("Listening...")
-        recognizer.adjust_for_ambient_noise(source, duration=0.5)  # Reduced noise adjustment
+        recognizer.adjust_for_ambient_noise(source, duration=0.5)
         try:
-            audio = recognizer.listen(source, timeout=3, phrase_time_limit=3)  # Reduced timeout
+            audio = recognizer.listen(source, timeout=3, phrase_time_limit=3)
             return recognizer.recognize_google(audio).lower()
         except (sr.UnknownValueError, sr.WaitTimeoutError):
             return None
@@ -60,30 +56,35 @@ def listen():
             speak("Check your internet connection.")
             return None
 
+# ---------------------- CHAT WITH GPT ----------------------
 def chat_with_ai(prompt):
-    """Asynchronous AI response to prevent lag"""
+    """Run GPT chat safely on thread"""
     def fetch_response():
         chat_history.append({"role": "user", "content": prompt})
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=chat_history
-        )
-        reply = response["choices"][0]["message"]["content"]
-        chat_history.append({"role": "assistant", "content": reply})
-        speak(reply)
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=chat_history
+            )
+            reply = response["choices"][0]["message"]["content"]
+            chat_history.append({"role": "assistant", "content": reply})
+            speak(reply)
+        except Exception as e:
+            speak("I am having trouble connecting to OpenAI right now.")
+            print("OpenAI Error:", e)
 
     threading.Thread(target=fetch_response).start()
 
+# ---------------------- OPEN APP ----------------------
 def open_application(app_name):
-    """Open applications"""
     if app_name in app_paths:
         subprocess.Popen(app_paths[app_name])
         speak(f"Opening {app_name}.")
     else:
         speak("Application not found.")
 
+# ---------------------- COMMAND EXECUTION ----------------------
 def execute_command(command):
-    """Process user commands"""
     words = command.lower().split(" ")
 
     if words[0] == "play":
@@ -93,43 +94,50 @@ def execute_command(command):
             speak(f"Playing {song}.")
         else:
             speak("Song not found.")
-    
+
     elif "open google" in command:
         webbrowser.open("https://www.google.com")
         speak("Opening Google.")
-    
+
     elif "open youtube" in command:
         webbrowser.open("https://www.youtube.com")
         speak("Opening YouTube.")
 
     elif "open gpt" in command:
-        webbrowser.open("https://chatgpt.com")
-        speak("Opening ChatGPT")
-    
+        webbrowser.open("https://chat.openai.com")
+        speak("Opening ChatGPT.")
+
     elif "open" in command:
         open_application(command.replace("open", "").strip())
-    
+
     elif "jarvis" in command:
         chat_with_ai(command.replace("jarvis", "").strip())
-    
+
     elif "tell news" in command:
         threading.Thread(target=get_news).start()
-    
+
     elif "exit" in command or "stop" in command:
-        speak("Goodbye!")
+        speak("Goodbye! Have a great day.")
         exit()
-    
+
     else:
         speak("I didn't understand that.")
 
+# ---------------------- NEWS FETCH ----------------------
 def get_news():
-    """Fetch top 3 news headlines (faster)"""
-    r = requests.get(f"https://newsapi.org/v2/top-headlines?country=in&apiKey={newsapi}")
-    if r.status_code == 200:
-        articles = r.json().get('articles', [])[:3]
-        for article in articles:
-            speak(article['title'])
+    try:
+        r = requests.get(f"https://newsapi.org/v2/top-headlines?country=in&apiKey={newsapi}")
+        if r.status_code == 200:
+            articles = r.json().get('articles', [])[:3]
+            for article in articles:
+                speak(article['title'])
+        else:
+            speak("Unable to fetch news right now.")
+    except Exception as e:
+        print("News API Error:", e)
+        speak("There was a problem fetching the news.")
 
+# ---------------------- WAKE WORD ----------------------
 def wake_word_detected():
     recognizer = sr.Recognizer()
     wake_words = ["jarvis", "hey jarvis", "hi jarvis", "ok jarvis", "hello jarvis"]
@@ -142,31 +150,32 @@ def wake_word_detected():
 
     with mic as source:
         print("Say 'Jarvis' to activate...")
-        recognizer.adjust_for_ambient_noise(source, duration=0.5)  # Faster adjustment
+        recognizer.adjust_for_ambient_noise(source, duration=0.5)
 
         try:
-            audio = recognizer.listen(source, timeout=3, phrase_time_limit=3)  # Faster response
+            audio = recognizer.listen(source, timeout=3, phrase_time_limit=3)
             word = recognizer.recognize_google(audio).lower()
             print("You said:", word)
 
             for wake in wake_words:
                 if wake in word:
-                    speak("Yes boss")  # Jarvis acknowledges faster
-                    return True  # Activate Jarvis immediately
+                    time.sleep(0.3)
+                    speak("Yes boss")
+                    return True
 
-            return False  # No wake word detected
+            return False
 
         except sr.UnknownValueError:
-            return False  # If speech is unclear, ignore it
+            return False
 
         except sr.WaitTimeoutError:
-            return False  # If no speech detected, don't hang
+            return False
 
         except sr.RequestError:
             print("Could not request results, check your internet connection")
             return False
 
-
+# ---------------------- MAIN ----------------------
 if __name__ == "__main__":
     speak("Hello, I am Jarvis. Say 'Jarvis' to activate me.")
     while True:
