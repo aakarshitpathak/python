@@ -4,4 +4,13 @@
 /mega project 1 - Jarvis
 /mega project 2
 /project 1
-/project 2
+/project 2venv/ 
+.venv/ 
+__pycache__/ 
+*.pyc 
+.env 
+venv/
+.venv/
+__pycache__/
+*.pyc
+.env
